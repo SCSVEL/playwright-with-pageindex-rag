@@ -74,7 +74,7 @@ async def smart_page(tmp_path):
 
 ### Example Test
 
-Sample test is here [`tests/myapp/test_register.py`](tests\myapp\test_register.py).
+Sample test is here [`tests/myapp/test_register.py`](tests/myapp/test_register.py).
 
 ## Run MyApp Tests
 
