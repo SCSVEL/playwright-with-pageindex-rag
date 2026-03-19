@@ -26,6 +26,9 @@ tmp_chroma/
 tmp_index/
 *.log
 
+# Local debug scripts
+scripts/
+
 # Playwright/browser artifacts
 playwright-report/
 test-results/
