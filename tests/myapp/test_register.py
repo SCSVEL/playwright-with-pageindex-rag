@@ -1,0 +1,29 @@
+"""Real register test using SmartPage APIs with command-only test body."""
+
+import time
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_register_with_internal_fallback_and_explicit_smartlocator(smart_page):
+    username = f"autouser-{int(time.time())}"
+    password = "P@ssw0rd123!"
+
+    await smart_page.goto("https://practice.expandtesting.com/register", wait_until="domcontentloaded")
+
+    # Explicit SmartLocator usage as a Playwright-like command.
+    await smart_page.smartlocator(texts=["Username"]).fill(username)
+
+    # Normal Playwright-style commands.
+    await smart_page.locator("#password").fill(password)
+    await smart_page.locator("#confirmPassword").fill(password)
+
+    # This locator is intentionally wrong; internal fallback should click Register.
+    await smart_page.locator("#register-submit-does-not-exist").click()
+
+    await smart_page.wait_for_url("**/login", wait_until="domcontentloaded", timeout=10000)
+    body_text = await smart_page.locator("body").inner_text()
+
+    assert smart_page.url.endswith("/login")
+    assert "Successfully registered, you can log in now." in body_text
