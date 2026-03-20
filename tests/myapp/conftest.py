@@ -117,18 +117,41 @@ def _is_rag_section(section_title: str, section_text: str) -> bool:
     return any(hint in body for hint in RAG_SOURCE_HINTS)
 
 
+def _split_section_on_rag_start(section_title: str, section_text: str) -> tuple[str, str]:
+    """Return (kept_text, rag_text) by cutting from the first RAG hint line onward."""
+    title = section_title.lower()
+    if not ("captured stdout" in title or "captured stderr" in title or "captured log" in title):
+        return section_text, ""
+
+    lines = section_text.splitlines()
+    rag_start = None
+
+    for idx, line in enumerate(lines):
+        lower_line = line.lower()
+        if any(hint in lower_line for hint in RAG_SOURCE_HINTS):
+            rag_start = idx
+            break
+
+    if rag_start is None:
+        return section_text, ""
+
+    kept = "\n".join(lines[:rag_start]).strip()
+    rag = "\n".join(lines[rag_start:]).strip()
+    return kept, rag
+
+
 def pytest_configure(config):
     del config
     RAG_LOG_ENTRIES.clear()
 
 
-def pytest_html_results_table_header(cells):
-    cells.insert(-1, "<th>Screenshot</th>")
-
-
 def pytest_html_results_table_row(report, cells):
     screenshot_html = getattr(report, "screenshot_modal_html", "")
-    cells.insert(-1, f"<td>{screenshot_html}</td>")
+    if not screenshot_html:
+        return
+
+    # Inject thumbnail into the test-id cell to avoid interactions with pytest-html link cells.
+    cells[1] = cells[1].replace("</td>", f"{screenshot_html}</td>")
 
 
 def pytest_runtest_logreport(report):
@@ -139,10 +162,17 @@ def pytest_runtest_logreport(report):
     rag_sections = []
 
     for section_title, section_text in report.sections:
-        if _is_rag_section(section_title, section_text):
+        kept_text, rag_text = _split_section_on_rag_start(section_title, section_text)
+        if kept_text:
+            kept_sections.append((section_title, kept_text))
+        if rag_text:
+            rag_sections.append((section_title, rag_text))
+
+        # If section didn't split but entire section matches old source-based rule, move it fully.
+        if not rag_text and _is_rag_section(section_title, section_text):
+            if kept_sections and kept_sections[-1] == (section_title, kept_text):
+                kept_sections.pop()
             rag_sections.append((section_title, section_text))
-        else:
-            kept_sections.append((section_title, section_text))
 
     if rag_sections:
         RAG_LOG_ENTRIES.append((report.nodeid, rag_sections))
@@ -196,7 +226,6 @@ def pytest_runtest_makereport(item, call):
     encoded_image = base64.b64encode(image_bytes).decode("ascii")
     modal_id = f"modal_{_safe_nodeid(item.nodeid)}"
     rep_call.screenshot_modal_html = _build_modal_extra(encoded_image, modal_id)
-    extras.append(pytest_html.extras.png(encoded_image, name="Screenshot (raw)"))
     rep_call.extras = extras
 
 
