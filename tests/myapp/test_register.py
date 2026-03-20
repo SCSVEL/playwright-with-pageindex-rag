@@ -6,7 +6,11 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_register_with_internal_fallback_and_explicit_smartlocator(smart_page):
+async def test_register_site(smart_page):
+    """
+    This is to show how to use SmartPage both with explicit SmartLocator commands
+    and normal Playwright-style commands for fallback 
+    """ 
     username = f"autouser-{int(time.time())}"
     password = "P@ssw0rd123!"
 
@@ -22,7 +26,7 @@ async def test_register_with_internal_fallback_and_explicit_smartlocator(smart_p
     # This locator is intentionally wrong; internal fallback should click Register.
     await smart_page.locator("#register-submit-does-not-exist").click()
 
-    await smart_page.wait_for_url("**/login", wait_until="domcontentloaded", timeout=10000)
+    await smart_page.wait_for_url("**/login", wait_until="domcontentloaded", timeout=10_000)
     body_text = await smart_page.locator("body").inner_text()
 
     assert smart_page.url.endswith("/login")
@@ -42,8 +46,8 @@ async def test_another_site(smart_page):
     # Normal Playwright-style commands.
     await smart_page.locator("#password").fill(password)    
 
-    # This locator is intentionally wrong; internal fallback should click Register.
+    # This locator is intentionally wrong; internal fallback should click submit.
     await smart_page.locator("#submit-does-not-exist").click()
 
-    await smart_page.wait_for_url("**/logged-in-successfully", wait_until="domcontentloaded", timeout=10000)
+    await smart_page.wait_for_url("**/logged-in-successfully/", wait_until="domcontentloaded", timeout=10_000)
     assert smart_page.locator("h1").contains_text("Logged In Successfully")
