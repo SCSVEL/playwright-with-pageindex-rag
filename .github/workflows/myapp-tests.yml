@@ -5,14 +5,14 @@ on:
     branches: ["**"]
     paths:
       - "tests/myapp/**"
-      - "tests/conftest.py"
+      - "tests/myapp/conftest.py"
       - "src/**"
       - "requirements.txt"
       - ".github/workflows/myapp-tests.yml"
   pull_request:
     paths:
       - "tests/myapp/**"
-      - "tests/conftest.py"
+      - "tests/myapp/conftest.py"
       - "src/**"
       - "requirements.txt"
       - ".github/workflows/myapp-tests.yml"
@@ -46,4 +46,19 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          pytest -q tests/myapp -v
+          mkdir -p playwright-results/screenshots
+          pytest -q tests/myapp -v --junitxml=playwright-results/pytest-results.xml
+
+      - name: Upload Playwright results and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ github.run_id }}
+          path: |
+            playwright-results/**
+            test-results/**
+            playwright-report/**
+            **/screenshots/**
+            **/*screenshot*.png
+          if-no-files-found: warn
+          retention-days: 14
