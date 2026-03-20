@@ -2,6 +2,7 @@
 
 import base64
 from datetime import datetime
+from html import escape
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,18 @@ from src.core import (
 
 
 RESULTS_DIR = Path("playwright-results") / "screenshots"
+RAG_LOG_KEYWORDS = (
+    "rag",
+    "pageindex",
+    "queryretriever",
+    "locatorgenerator",
+    "smartlocator",
+    "smart_page_runtime",
+    "Captured stderr call",
+    "Captured stdout call",
+    "Captured log call",
+)
+RAG_LOG_ENTRIES = []
 
 
 def _safe_nodeid(nodeid: str) -> str:
@@ -24,8 +37,8 @@ def _safe_nodeid(nodeid: str) -> str:
 
 
 def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
-        image_src = f"data:image/png;base64,{encoded_image}"
-        return f"""
+    image_src = f"data:image/png;base64,{encoded_image}"
+    return f"""
 <style>
     .sp-modal-toggle {{
         display: none;
@@ -94,18 +107,55 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
 """
 
 
+def _is_rag_related(text: str) -> bool:
+    lower = text.lower()
+    return any(keyword in lower for keyword in RAG_LOG_KEYWORDS)
+
+
+def pytest_configure(config):
+    del config
+    RAG_LOG_ENTRIES.clear()
+
+
 def pytest_html_results_table_header(cells):
-        cells.insert(-1, "<th>Screenshot</th>")
+    cells.insert(-1, "<th>Screenshot</th>")
 
 
 def pytest_html_results_table_row(report, cells):
-        screenshot_html = getattr(report, "screenshot_modal_html", "")
-        cells.insert(-1, f"<td>{screenshot_html}</td>")
+    screenshot_html = getattr(report, "screenshot_modal_html", "")
+    cells.insert(-1, f"<td>{screenshot_html}</td>")
+
+
+def pytest_html_results_table_html(report, data):
+    kept = []
+
+    for chunk in data:
+        if _is_rag_related(chunk):
+            RAG_LOG_ENTRIES.append(chunk)
+        else:
+            kept.append(chunk)
+
+    data[:] = kept
+
+
+def pytest_html_results_summary(prefix, summary, postfix):
+    del prefix
+    del summary
+    if not RAG_LOG_ENTRIES:
+        return
+
+    lines = "".join(f"<li><code>{escape(line)}</code></li>" for line in RAG_LOG_ENTRIES)
+    postfix.append(
+        "<details><summary><strong>RAG log</strong></summary>"
+        "<ul style='max-height:320px;overflow:auto'>"
+        f"{lines}"
+        "</ul></details>"
+    )
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Store phase reports and attach screenshot extras for failed test calls."""
+    """Store phase reports and attach screenshot extras to the test call row."""
     outcome = yield
     rep = outcome.get_result()
     setattr(item, f"rep_{rep.when}", rep)
@@ -115,7 +165,7 @@ def pytest_runtest_makereport(item, call):
 
     rep_call = getattr(item, "rep_call", None)
     screenshot_path = getattr(item, "_failure_screenshot_path", None)
-    if not rep_call or not rep_call.failed or not screenshot_path:
+    if not rep_call or not screenshot_path:
         return
 
     pytest_html = item.config.pluginmanager.getplugin("html")
@@ -147,18 +197,16 @@ async def smart_page(tmp_path, request):
         request.node._playwright_page = page
         yield SmartPage(page, engine)
 
-        rep_call = getattr(request.node, "rep_call", None)
-        if rep_call and rep_call.failed:
-            RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
-            screenshot_name = f"{_safe_nodeid(request.node.nodeid)}_{timestamp}.png"
-            screenshot_path = RESULTS_DIR / screenshot_name
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        screenshot_name = f"{_safe_nodeid(request.node.nodeid)}_{timestamp}.png"
+        screenshot_path = RESULTS_DIR / screenshot_name
 
-            try:
-                await page.screenshot(path=str(screenshot_path), full_page=True)
-                request.node._failure_screenshot_path = screenshot_path
-            except Exception:
-                # Best-effort screenshot capture should never fail the test run.
-                request.node._failure_screenshot_path = None
+        try:
+            await page.screenshot(path=str(screenshot_path), full_page=True)
+            request.node._failure_screenshot_path = screenshot_path
+        except Exception:
+            # Best-effort screenshot capture should never fail the test run.
+            request.node._failure_screenshot_path = None
 
         await browser.close()
