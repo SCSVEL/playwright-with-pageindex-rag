@@ -27,3 +27,23 @@ async def test_register_with_internal_fallback_and_explicit_smartlocator(smart_p
 
     assert smart_page.url.endswith("/login")
     assert "Successfully registered, you can log in now." in body_text
+
+
+@pytest.mark.asyncio
+async def test_another_site(smart_page):
+    username = "student"
+    password = "Password123"
+
+    await smart_page.goto("https://practicetestautomation.com/practice-test-login/", wait_until="domcontentloaded")
+
+    # Explicit SmartLocator usage as a Playwright-like command.
+    await smart_page.smartlocator(texts=["Username"]).fill(username)
+
+    # Normal Playwright-style commands.
+    await smart_page.locator("#password").fill(password)    
+
+    # This locator is intentionally wrong; internal fallback should click Register.
+    await smart_page.locator("#submit-does-not-exist").click()
+
+    await smart_page.wait_for_url("**/logged-in-successfully", wait_until="domcontentloaded", timeout=10000)
+    assert smart_page.locator("h1").contains_text("Logged In Successfully")
