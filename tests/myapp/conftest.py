@@ -18,16 +18,15 @@ from src.core import (
 
 
 RESULTS_DIR = Path("playwright-results") / "screenshots"
-RAG_LOG_KEYWORDS = (
-    "rag",
-    "pageindex",
-    "queryretriever",
-    "locatorgenerator",
-    "smartlocator",
+RAG_SOURCE_HINTS = (
+    "src/core/",
     "smart_page_runtime",
-    "Captured stderr call",
-    "Captured stdout call",
-    "Captured log call",
+    "page_index",
+    "query_retrieval",
+    "locator_generation",
+    "smart_locator",
+    "chromadb",
+    "langchain",
 )
 RAG_LOG_ENTRIES = []
 
@@ -44,7 +43,9 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
         display: none;
     }}
     .sp-thumb-trigger img {{
-        width: 220px;
+        width: 120px;
+        max-height: 80px;
+        object-fit: cover;
         max-width: 100%;
         border: 1px solid #d0d7de;
         border-radius: 6px;
@@ -107,9 +108,13 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
 """
 
 
-def _is_rag_related(text: str) -> bool:
-    lower = text.lower()
-    return any(keyword in lower for keyword in RAG_LOG_KEYWORDS)
+def _is_rag_section(section_title: str, section_text: str) -> bool:
+    title = section_title.lower()
+    if not ("captured stdout" in title or "captured stderr" in title or "captured log" in title):
+        return False
+
+    body = section_text.lower()
+    return any(hint in body for hint in RAG_SOURCE_HINTS)
 
 
 def pytest_configure(config):
@@ -126,16 +131,23 @@ def pytest_html_results_table_row(report, cells):
     cells.insert(-1, f"<td>{screenshot_html}</td>")
 
 
-def pytest_html_results_table_html(report, data):
-    kept = []
+def pytest_runtest_logreport(report):
+    if not getattr(report, "sections", None):
+        return
 
-    for chunk in data:
-        if _is_rag_related(chunk):
-            RAG_LOG_ENTRIES.append(chunk)
+    kept_sections = []
+    rag_sections = []
+
+    for section_title, section_text in report.sections:
+        if _is_rag_section(section_title, section_text):
+            rag_sections.append((section_title, section_text))
         else:
-            kept.append(chunk)
+            kept_sections.append((section_title, section_text))
 
-    data[:] = kept
+    if rag_sections:
+        RAG_LOG_ENTRIES.append((report.nodeid, rag_sections))
+
+    report.sections = kept_sections
 
 
 def pytest_html_results_summary(prefix, summary, postfix):
@@ -144,12 +156,19 @@ def pytest_html_results_summary(prefix, summary, postfix):
     if not RAG_LOG_ENTRIES:
         return
 
-    lines = "".join(f"<li><code>{escape(line)}</code></li>" for line in RAG_LOG_ENTRIES)
+    blocks = []
+    for nodeid, sections in RAG_LOG_ENTRIES:
+        section_html = "".join(
+            f"<h5>{escape(title)}</h5><pre style='white-space:pre-wrap'>{escape(text)}</pre>"
+            for title, text in sections
+        )
+        blocks.append(f"<details><summary>{escape(nodeid)}</summary>{section_html}</details>")
+
     postfix.append(
         "<details><summary><strong>RAG log</strong></summary>"
-        "<ul style='max-height:320px;overflow:auto'>"
-        f"{lines}"
-        "</ul></details>"
+        "<div style='max-height:420px;overflow:auto'>"
+        f"{''.join(blocks)}"
+        "</div></details>"
     )
 
 
