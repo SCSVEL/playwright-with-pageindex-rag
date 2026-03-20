@@ -47,7 +47,7 @@ jobs:
           PYTHONPATH: .
         run: |
           mkdir -p playwright-results/screenshots
-          pytest -q tests/myapp -v --junitxml=playwright-results/pytest-results.xml
+          pytest -q tests/myapp -v --html=playwright-results/html-report/report.html
 
       - name: Upload Playwright results and screenshots
         if: always()
