@@ -45,7 +45,7 @@ def pytest_runtest_makereport(item, call):
     extras = getattr(rep, "extras", [])
     image_bytes = Path(screenshot_path).read_bytes()
     encoded_image = base64.b64encode(image_bytes).decode("ascii")
-    extras.append(pytest_html.extras.png(encoded_image, mime_type="image/png", extension="png"))
+    extras.append(pytest_html.extras.png(encoded_image, extension="png"))
     extras.append(pytest_html.extras.url(str(screenshot_path), name="Screenshot file"))
     rep.extras = extras
 
