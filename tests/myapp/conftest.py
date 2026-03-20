@@ -23,6 +23,60 @@ def _safe_nodeid(nodeid: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in nodeid)
 
 
+def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
+        image_src = f"data:image/png;base64,{encoded_image}"
+        return f"""
+<style>
+    .sp-thumb {{
+        width: 220px;
+        max-width: 100%;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        cursor: zoom-in;
+    }}
+    .sp-modal {{
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.82);
+        padding: 24px;
+        box-sizing: border-box;
+        text-align: center;
+    }}
+    .sp-modal:target {{
+        display: block;
+    }}
+    .sp-modal img {{
+        max-width: min(96vw, 1800px);
+        max-height: 90vh;
+        margin-top: 24px;
+        border-radius: 8px;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+    }}
+    .sp-modal-close {{
+        color: #fff;
+        text-decoration: none;
+        font-size: 26px;
+        font-weight: 700;
+        position: absolute;
+        right: 28px;
+        top: 14px;
+        line-height: 1;
+    }}
+</style>
+<div>
+    <a href="#{modal_id}" title="Click to expand">
+        <img class="sp-thumb" src="{image_src}" alt="Failure screenshot" />
+    </a>
+</div>
+<div id="{modal_id}" class="sp-modal">
+    <a href="#" class="sp-modal-close" aria-label="Close">×</a>
+    <img src="{image_src}" alt="Failure screenshot" />
+</div>
+"""
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """Store phase reports and attach screenshot extras for failed test calls."""
@@ -46,7 +100,8 @@ def pytest_runtest_makereport(item, call):
     image_bytes = Path(screenshot_path).read_bytes()
     encoded_image = base64.b64encode(image_bytes).decode("ascii")
     extras.append(pytest_html.extras.png(encoded_image))
-    extras.append(pytest_html.extras.url(str(screenshot_path), name="Screenshot file"))
+    modal_id = f"modal_{_safe_nodeid(item.nodeid)}"
+    extras.append(pytest_html.extras.html(_build_modal_extra(encoded_image, modal_id)))
     rep.extras = extras
 
 
