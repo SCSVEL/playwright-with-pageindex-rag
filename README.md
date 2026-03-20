@@ -83,3 +83,7 @@ pip install -r requirements.txt
 playwright install
 pytest -q tests/myapp -v
 ```
+
+### Sample report
+
+![alt text](image.png)
