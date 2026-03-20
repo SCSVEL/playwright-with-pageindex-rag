@@ -18,6 +18,16 @@ from src.core import (
 
 
 RESULTS_DIR = Path("playwright-results") / "screenshots"
+RAG_KEYWORDS = (
+    "rag",
+    "pageindex",
+    "queryretriever",
+    "locatorgenerator",
+    "smartlocator",
+    "smart_page_runtime",
+    "chroma",
+    "langchain",
+)
 RAG_SOURCE_HINTS = (
     "src/core/",
     "smart_page_runtime",
@@ -39,10 +49,7 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
     image_src = f"data:image/png;base64,{encoded_image}"
     return f"""
 <style>
-    .sp-modal-toggle {{
-        display: none;
-    }}
-    .sp-thumb-trigger img {{
+    .sp-thumb-link img {{
         width: 120px;
         max-height: 80px;
         object-fit: cover;
@@ -87,20 +94,20 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
         color: #fff;
         cursor: pointer;
         line-height: 1;
+        text-decoration: none;
     }}
-    .sp-modal-toggle:checked + .sp-thumb-trigger + .sp-modal {{
+    .sp-modal:target {{
         display: block;
     }}
 </style>
 <div>
-    <input id="{modal_id}" class="sp-modal-toggle" type="checkbox" />
-    <label for="{modal_id}" class="sp-thumb-trigger" title="Click to expand">
+    <a href="#{modal_id}" class="sp-thumb-link" title="Click to expand" aria-label="Open screenshot">
         <img src="{image_src}" alt="Failure screenshot" />
-    </label>
-    <div class="sp-modal">
-        <label for="{modal_id}" class="sp-modal-overlay" aria-label="Close modal"></label>
+    </a>
+    <div id="{modal_id}" class="sp-modal">
+        <a href="#" class="sp-modal-overlay" aria-label="Close modal"></a>
         <div class="sp-modal-content">
-            <label for="{modal_id}" class="sp-modal-close" aria-label="Close">×</label>
+            <a href="#" class="sp-modal-close" aria-label="Close">×</a>
             <img src="{image_src}" alt="Failure screenshot full view" />
         </div>
     </div>
@@ -128,7 +135,7 @@ def _split_section_on_rag_start(section_title: str, section_text: str) -> tuple[
 
     for idx, line in enumerate(lines):
         lower_line = line.lower()
-        if any(hint in lower_line for hint in RAG_SOURCE_HINTS):
+        if any(hint in lower_line for hint in RAG_SOURCE_HINTS) or any(keyword in lower_line for keyword in RAG_KEYWORDS):
             rag_start = idx
             break
 
@@ -145,13 +152,13 @@ def pytest_configure(config):
     RAG_LOG_ENTRIES.clear()
 
 
+def pytest_html_results_table_header(cells):
+    cells.insert(-1, "<th>Screenshot</th>")
+
+
 def pytest_html_results_table_row(report, cells):
     screenshot_html = getattr(report, "screenshot_modal_html", "")
-    if not screenshot_html:
-        return
-
-    # Inject thumbnail into the test-id cell to avoid interactions with pytest-html link cells.
-    cells[1] = cells[1].replace("</td>", f"{screenshot_html}</td>")
+    cells.insert(-1, f"<td>{screenshot_html}</td>")
 
 
 def pytest_runtest_logreport(report):
