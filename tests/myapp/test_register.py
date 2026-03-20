@@ -50,4 +50,5 @@ async def test_another_site(smart_page):
     await smart_page.locator("#submit-does-not-exist").click()
 
     await smart_page.wait_for_url("**/logged-in-successfully/", wait_until="domcontentloaded", timeout=10_000)
-    assert smart_page.locator("h1").contains_text("Logged In Successfully")
+    assert "Logged In Successfully" in await smart_page.locator("h1").inner_text()
+    

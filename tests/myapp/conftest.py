@@ -27,7 +27,10 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
         image_src = f"data:image/png;base64,{encoded_image}"
         return f"""
 <style>
-    .sp-thumb {{
+    .sp-modal-toggle {{
+        display: none;
+    }}
+    .sp-thumb-trigger img {{
         width: 220px;
         max-width: 100%;
         border: 1px solid #d0d7de;
@@ -37,44 +40,67 @@ def _build_modal_extra(encoded_image: str, modal_id: str) -> str:
     .sp-modal {{
         display: none;
         position: fixed;
+        inset: 0;
         z-index: 9999;
+    }}
+    .sp-modal-overlay {{
+        position: absolute;
         inset: 0;
         background: rgba(0, 0, 0, 0.82);
+    }}
+    .sp-modal-content {{
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
         padding: 24px;
         box-sizing: border-box;
-        text-align: center;
+        z-index: 1;
     }}
-    .sp-modal:target {{
-        display: block;
-    }}
-    .sp-modal img {{
+    .sp-modal-content img {{
         max-width: min(96vw, 1800px);
         max-height: 90vh;
-        margin-top: 24px;
         border-radius: 8px;
         box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
     }}
     .sp-modal-close {{
-        color: #fff;
-        text-decoration: none;
+        position: absolute;
+        top: 14px;
+        right: 18px;
         font-size: 26px;
         font-weight: 700;
-        position: absolute;
-        right: 28px;
-        top: 14px;
+        color: #fff;
+        cursor: pointer;
         line-height: 1;
+    }}
+    .sp-modal-toggle:checked + .sp-thumb-trigger + .sp-modal {{
+        display: block;
     }}
 </style>
 <div>
-    <a href="#{modal_id}" title="Click to expand">
-        <img class="sp-thumb" src="{image_src}" alt="Failure screenshot" />
-    </a>
-</div>
-<div id="{modal_id}" class="sp-modal">
-    <a href="#" class="sp-modal-close" aria-label="Close">×</a>
-    <img src="{image_src}" alt="Failure screenshot" />
+    <input id="{modal_id}" class="sp-modal-toggle" type="checkbox" />
+    <label for="{modal_id}" class="sp-thumb-trigger" title="Click to expand">
+        <img src="{image_src}" alt="Failure screenshot" />
+    </label>
+    <div class="sp-modal">
+        <label for="{modal_id}" class="sp-modal-overlay" aria-label="Close modal"></label>
+        <div class="sp-modal-content">
+            <label for="{modal_id}" class="sp-modal-close" aria-label="Close">×</label>
+            <img src="{image_src}" alt="Failure screenshot full view" />
+        </div>
+    </div>
 </div>
 """
+
+
+def pytest_html_results_table_header(cells):
+        cells.insert(-1, "<th>Screenshot</th>")
+
+
+def pytest_html_results_table_row(report, cells):
+        screenshot_html = getattr(report, "screenshot_modal_html", "")
+        cells.insert(-1, f"<td>{screenshot_html}</td>")
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -96,13 +122,13 @@ def pytest_runtest_makereport(item, call):
     if not pytest_html:
         return
 
-    extras = getattr(rep, "extras", [])
+    extras = getattr(rep_call, "extras", [])
     image_bytes = Path(screenshot_path).read_bytes()
     encoded_image = base64.b64encode(image_bytes).decode("ascii")
-    extras.append(pytest_html.extras.png(encoded_image))
     modal_id = f"modal_{_safe_nodeid(item.nodeid)}"
-    extras.append(pytest_html.extras.html(_build_modal_extra(encoded_image, modal_id)))
-    rep.extras = extras
+    rep_call.screenshot_modal_html = _build_modal_extra(encoded_image, modal_id)
+    extras.append(pytest_html.extras.png(encoded_image, name="Screenshot (raw)"))
+    rep_call.extras = extras
 
 
 @pytest_asyncio.fixture
