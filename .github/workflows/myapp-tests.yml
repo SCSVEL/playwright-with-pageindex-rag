@@ -37,6 +37,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest-html
 
       - name: Install Playwright Chromium
         run: |
@@ -46,8 +47,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          mkdir -p playwright-results/screenshots
-          pytest -q tests/myapp -v --html=playwright-results/html-report/report.html
+          mkdir -p playwright-results/screenshots playwright-results/html-report
+          pytest -q tests/myapp -v \
+            --html=playwright-results/html-report/report.html \
+            --self-contained-html \
+            --junitxml=playwright-results/pytest-results.xml
 
       - name: Upload Playwright results and screenshots
         if: always()
