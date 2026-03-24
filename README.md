@@ -28,6 +28,82 @@ pip install -r requirements.txt
 playwright install
 ```
 
+## RAG Flow Diagram
+
+This diagram shows the failure-only recovery path used by the SmartLocator/PageIndex pipeline.
+
+```mermaid
+flowchart TD
+    A[Test uses SmartPage or SmartLocator] --> B[Try original Playwright locator]
+    B -->|Success| C[Action completes]
+    B -->|Failure| D[Capture live page HTML]
+    D --> E[Parse DOM into ElementNode records]
+    E --> F[Build PageIndex vector store]
+    F --> G[Create query candidates from failed locator context]
+    G --> H[Retrieve nearest matching elements]
+    H --> I[Generate ranked locator alternatives]
+    I --> J[Retry semantic locators first]
+    J -->|Alternative works| K[Recovered action succeeds]
+    J -->|All fail| L[Raise original Playwright error]
+
+    M[Custom smartlabels selector] --> A
+    N[Hints: text, label, placeholder, role, attrs] --> G
+```
+
+## Runtime Sequence Diagram
+
+This diagram shows what happens at runtime when a normal Playwright action fails and the recovery pipeline takes over.
+
+```mermaid
+sequenceDiagram
+    participant T as Test
+    participant SP as SmartPage
+    participant P as Playwright Page
+    participant SFL as SmartFallbackLocator
+    participant SE as SmartEngine
+    participant HC as HTMLCapture
+    participant PI as PageIndex
+    participant QR as QueryRetriever
+    participant LG as LocatorGenerator
+    participant SL as SmartLocator
+
+    T->>SP: locator("#missing-button").click()
+    SP->>P: create base locator
+    SP-->>T: SmartFallbackLocator
+    T->>SFL: click()
+    SFL->>P: base locator click()
+
+    alt Primary locator works
+        P-->>SFL: success
+        SFL-->>T: action completed
+    else Primary locator fails
+        P-->>SFL: exception
+        SFL->>SE: build_smart_locator(page, selector)
+        SE->>HC: capture_page(page)
+        HC-->>SE: HTML snapshot
+        SE->>PI: build_index(snapshot)
+        SE->>SL: create SmartLocator
+        SL->>QR: retrieve(failed locator context)
+        QR->>PI: semantic similarity query
+        PI-->>QR: ranked matching elements
+        QR-->>SL: retrieval results
+        SL->>LG: generate alternative locators
+        LG-->>SL: semantic-first candidates
+        loop Retry candidates
+            SL->>P: click/fill using generated locator
+            alt Candidate succeeds
+                P-->>SL: success
+                SL-->>SFL: recovered locator
+                SFL-->>T: action completed
+            else Candidate fails
+                P-->>SL: exception
+            end
+        end
+        SL-->>SFL: raise original error if all fail
+        SFL-->>T: failure
+    end
+```
+
 ## Real Usage In Playwright Tests
 
 The intended usage is:
